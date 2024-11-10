@@ -23,7 +23,8 @@ namespace proj1 {
             services.AddEndpointsApiExplorer();
             services.AddSwaggerGen();
 
-            services.AddScoped<ProductService>();
+            //services.AddScoped<ProductService>();
+            //services.AddHostedService<ProductService>();
 
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseNpgsql(Configuration.GetConnectionString("DefaultConnection")));

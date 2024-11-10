@@ -1,11 +1,8 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OfficeOpenXml;
 using proj1.DB;
 using proj1.DB.Models;
-using System.Globalization;
-using System.IO;
-using System.Threading.Tasks;
 
 
 
@@ -48,14 +45,15 @@ namespace proj1.Controllers {
                             var product = new Product() {
                                 Name = worksheet.Cells[row, 1].Text,
                                 Measurment = worksheet.Cells[row, 2].Text,
-                                UnitPrice = double.Parse(worksheet.Cells[row, 3].Text.Replace(',', '.')),
-                                Quantity = int.Parse(worksheet.Cells[row, 4].Text)
+                                UnitPrice = decimal.Parse(worksheet.Cells[row, 3].Text.Replace(',', '.')),
+                                Quantity = int.Parse(worksheet.Cells[row, 4].Text),
+                                Status = ProductStatus.Active
                             };
                             products.Add(product);
                         }
                     }
                 }
-                
+
                 _dbContext.Products.AddRange(products);
                 await _dbContext.SaveChangesAsync();
 
@@ -69,6 +67,84 @@ namespace proj1.Controllers {
             return Ok("Файл успешно загружен и сохранен.");
         }
 
+
+
+        [HttpPost("groups")]
+        public async Task<IActionResult> GetGroups() {
+            var groups = await _dbContext
+                .GroupedProducts
+                .ToListAsync();
+
+            var productIds = groups
+                .Select(g => g.ProductId)
+                .Distinct();
+
+            var products = await _dbContext
+                .Products
+                .Where(p => productIds.Contains(p.Id))
+                .ToListAsync();
+
+            
+            var groupsReturnModels = groups
+                .GroupBy(g => g.GroupName)
+                .Select(g => new GroupsReturnModel(
+                    GroupName: g.Key,
+                    TotalPrice: g.Sum(g => {
+                        var product = products.Where(p => p.Id == g.ProductId).First();
+                        return product.UnitPrice * g.Quantity;
+                    }))
+                );
+
+            return Ok(groupsReturnModels);
+
+
+        }
+        public record GroupsReturnModel(
+            string GroupName,
+            decimal TotalPrice
+        );
+
+
+        [HttpPost("groups/{name}")]
+        public async Task<IActionResult> GetGroups(string name) {
+            var groups = await _dbContext
+                .GroupedProducts
+                .Where(g => g.GroupName == name)
+                .ToListAsync();
+
+            var productIds = groups
+                .Select(g => g.ProductId)
+                .Distinct();
+
+            var products = await _dbContext
+                .Products
+                .Where(p => productIds.Contains(p.Id))
+                .ToListAsync();
+
+
+            var groupByNameReturnModels = groups
+                .Select(g => {
+                    var product = products.Where(p => p.Id == g.ProductId).First();
+                    return new GroupByNameReturnModel(
+                        GroupName: g.GroupName,
+                        ProductName: product.Name,
+                        Measurment: product.Measurment,
+                        UnitPrice: product.UnitPrice,
+                        Quantity: g.Quantity
+                    );
+                });
+
+            return Ok(groupByNameReturnModels);
+
+
+        }
+        public record GroupByNameReturnModel(
+            string GroupName,
+            string ProductName,
+            string Measurment,
+            decimal UnitPrice,
+            int Quantity
+        );
 
     }
 }
